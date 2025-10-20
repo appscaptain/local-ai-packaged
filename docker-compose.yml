@@ -1,5 +1,3 @@
-include:
-  - ./supabase/docker/docker-compose.yml
 
 volumes:
   n8n_storage:
@@ -39,7 +37,7 @@ x-ollama: &service-ollama
     - OLLAMA_CONTEXT_LENGTH=8192
     - OLLAMA_FLASH_ATTENTION=1
     - OLLAMA_KV_CACHE_TYPE=q8_0
-    - OLLAMA_MAX_LOADED_MODELS=2
+    - OLLAMA_MAX_LOADED_MODELS=2    
   volumes:
     - ollama_storage:/root/.ollama
 
@@ -52,6 +50,10 @@ x-init-ollama: &init-ollama
   command:
     - "-c"
     - "sleep 3; OLLAMA_HOST=ollama:11434 ollama pull qwen2.5:7b-instruct-q4_K_M; OLLAMA_HOST=ollama:11434 ollama pull nomic-embed-text"
+    # For a larger context length verison of the model, run these commands:
+    # echo "FROM qwen2.5:7b-instruct-q4_K_M\n\nPARAMETER num_ctx 8096" > Modelfile
+    # ollama create qwen2.5:7b-8k -f ./Modelfile
+    # Change the name of the LLM and num_ctx as you see fit.
 
 services:
   flowise:
@@ -63,9 +65,9 @@ services:
     environment:
         - PORT=3001
         - FLOWISE_USERNAME=${FLOWISE_USERNAME}
-        - FLOWISE_PASSWORD=${FLOWISE_PASSWORD}
+        - FLOWISE_PASSWORD=${FLOWISE_PASSWORD}  
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:host-gateway"        
     volumes:
         - ~/.flowise:/root/.flowise
     entrypoint: /bin/sh -c "sleep 3; flowise start"
@@ -89,7 +91,7 @@ services:
       - "-c"
       - "n8n import:credentials --separate --input=/backup/credentials && n8n import:workflow --separate --input=/backup/workflows"
     volumes:
-      - ./n8n/backup:/backup
+      - ./n8n/backup:/backup  
 
   n8n:
     <<: *service-n8n
@@ -102,9 +104,7 @@ services:
       - ./n8n/backup:/backup
       - ./shared:/data/shared
     depends_on:
-      n8n-import:
-        condition: service_completed_successfully
-
+      - n8n-import
   qdrant:
     image: qdrant/qdrant
     container_name: qdrant
@@ -128,7 +128,7 @@ services:
       - 7687/tcp
     environment:
         - NEO4J_AUTH=${NEO4J_AUTH:-"neo4j/your_password"}
-    restart: always
+    restart: always      
 
   caddy:
     container_name: caddy
@@ -144,7 +144,7 @@ services:
       - 80/tcp
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./caddy-addon:/etc/caddy/addons:ro
+      - ./caddy-addon:/etc/caddy/addons:ro      
       - caddy-data:/data:rw
       - caddy-config:/config:rw
     environment:
@@ -170,15 +170,11 @@ services:
   langfuse-worker:
     image: langfuse/langfuse-worker:3
     restart: always
-    depends_on: &langfuse-depends-on
-      postgres:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      clickhouse:
-        condition: service_healthy
+    depends_on:
+      - postgres
+      - minio
+      - redis
+      - clickhouse
     expose:
      - 3030/tcp
     environment: &langfuse-worker-env
@@ -228,7 +224,11 @@ services:
   langfuse-web:
     image: langfuse/langfuse:3
     restart: always
-    depends_on: *langfuse-depends-on
+    depends_on:
+      - postgres
+      - minio
+      - redis
+      - clickhouse
     expose:
       - 3000/tcp
     environment:
@@ -303,7 +303,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: postgres
     volumes:
-      - langfuse_postgres_data:/var/lib/postgresql/data
+      - langfuse_postgres_data:/var/lib/postgresql/data              
 
   redis:
     container_name: redis
@@ -329,7 +329,7 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 3s
       timeout: 10s
-      retries: 10
+      retries: 10        
 
   searxng:
     container_name: searxng
@@ -353,46 +353,40 @@ services:
       driver: "json-file"
       options:
         max-size: "1m"
-        max-file: "1"
+        max-file: "1"      
 
   ollama-cpu:
-    profiles: ["cpu"]
     <<: *service-ollama
 
-  ollama-gpu:
-    profiles: ["gpu-nvidia"]
-    <<: *service-ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+  #   ollama-gpu:
+  #     <<: *service-ollama
+  #     deploy:
+  #       resources:
+  #         reservations:
+  #           devices:
+  #             - driver: nvidia
+  #               count: 1
+  #               capabilities: [gpu]
 
-  ollama-gpu-amd:
-    profiles: ["gpu-amd"]
-    <<: *service-ollama
-    image: ollama/ollama:rocm
-    devices:
-      - "/dev/kfd"
-      - "/dev/dri"
+  #   ollama-gpu-amd:
+  #     <<: *service-ollama
+  #     image: ollama/ollama:rocm
+  #     devices:
+  #       - "/dev/kfd"
+  #       - "/dev/dri"
 
   ollama-pull-llama-cpu:
-    profiles: ["cpu"]
     <<: *init-ollama
     depends_on:
       - ollama-cpu
 
-  ollama-pull-llama-gpu:
-    profiles: ["gpu-nvidia"]
-    <<: *init-ollama
-    depends_on:
-      - ollama-gpu
-
-  ollama-pull-llama-gpu-amd:
-    profiles: [gpu-amd]
-    <<: *init-ollama
-    image: ollama/ollama:rocm
-    depends_on:
-     - ollama-gpu-amd
+  #   ollama-pull-llama-gpu:
+  #     <<: *init-ollama
+  #     depends_on:
+  #       - ollama-gpu
+  # 
+  #   ollama-pull-llama-gpu-amd:
+  #     <<: *init-ollama
+  #     image: ollama/ollama:rocm
+  #     depends_on:
+  #      - ollama-gpu-amd
