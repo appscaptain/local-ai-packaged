@@ -1,5 +1,3 @@
-include:
-  - ./supabase/docker/docker-compose.yml
 
 volumes:
   n8n_storage:
@@ -106,9 +104,7 @@ services:
       - ./n8n/backup:/backup
       - ./shared:/data/shared
     depends_on:
-      n8n-import:
-        condition: service_completed_successfully
-
+      - n8n-import
   qdrant:
     image: qdrant/qdrant
     container_name: qdrant
@@ -174,15 +170,11 @@ services:
   langfuse-worker:
     image: langfuse/langfuse-worker:3
     restart: always
-    depends_on: &langfuse-depends-on
-      postgres:
-        condition: service_healthy    
-      minio:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      clickhouse:
-        condition: service_healthy
+    depends_on:
+      - postgres
+      - minio
+      - redis
+      - clickhouse
     expose:
      - 3030/tcp
     environment: &langfuse-worker-env
@@ -232,7 +224,11 @@ services:
   langfuse-web:
     image: langfuse/langfuse:3
     restart: always
-    depends_on: *langfuse-depends-on
+    depends_on:
+      - postgres
+      - minio
+      - redis
+      - clickhouse
     expose:
       - 3000/tcp
     environment:
@@ -360,43 +356,37 @@ services:
         max-file: "1"      
 
   ollama-cpu:
-    profiles: ["cpu"]
     <<: *service-ollama
 
-  ollama-gpu:
-    profiles: ["gpu-nvidia"]
-    <<: *service-ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+  #   ollama-gpu:
+  #     <<: *service-ollama
+  #     deploy:
+  #       resources:
+  #         reservations:
+  #           devices:
+  #             - driver: nvidia
+  #               count: 1
+  #               capabilities: [gpu]
 
-  ollama-gpu-amd:
-    profiles: ["gpu-amd"]
-    <<: *service-ollama
-    image: ollama/ollama:rocm
-    devices:
-      - "/dev/kfd"
-      - "/dev/dri"
+  #   ollama-gpu-amd:
+  #     <<: *service-ollama
+  #     image: ollama/ollama:rocm
+  #     devices:
+  #       - "/dev/kfd"
+  #       - "/dev/dri"
 
   ollama-pull-llama-cpu:
-    profiles: ["cpu"]
     <<: *init-ollama
     depends_on:
       - ollama-cpu
 
-  ollama-pull-llama-gpu:
-    profiles: ["gpu-nvidia"]
-    <<: *init-ollama
-    depends_on:
-      - ollama-gpu
-
-  ollama-pull-llama-gpu-amd:
-    profiles: [gpu-amd]
-    <<: *init-ollama
-    image: ollama/ollama:rocm
-    depends_on:
-     - ollama-gpu-amd
+  #   ollama-pull-llama-gpu:
+  #     <<: *init-ollama
+  #     depends_on:
+  #       - ollama-gpu
+  # 
+  #   ollama-pull-llama-gpu-amd:
+  #     <<: *init-ollama
+  #     image: ollama/ollama:rocm
+  #     depends_on:
+  #      - ollama-gpu-amd
